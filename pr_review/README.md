@@ -60,9 +60,11 @@ It retrieves PR data files, analyzes code diffs, generates insights, and posts s
 
 <h2>Example Review Comment</h2>
 
+<img src="https://github.com/YajithVishwa/n8n.workflows/blob/master/pr_review/images/comment.png" />
+
 <pre><code>Comments By AI Agent
 
-Quality Score - 2
+Quality Score - 20
 
 S͟u͟m͟m͟a͟r͟y͟
 Adds a new src/main.py with a main() function that defines two variables and attempts to print their sum, then runs main when executed as a script.
