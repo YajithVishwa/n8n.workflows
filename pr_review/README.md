@@ -36,7 +36,7 @@ It retrieves PR data files, analyzes code diffs, generates insights, and posts s
 
 <h2>Workflow</h2>
 
-<img src="https://github.com/YajithVishwa/n8n.workflows/blob/master/images/workflow.png" />
+<img src="https://github.com/YajithVishwa/n8n.workflows/blob/master/pr_review/images/workflow.png" />
 
 <ol>
   <li>Trigger on Pull Request events (opened, updated)</li>
