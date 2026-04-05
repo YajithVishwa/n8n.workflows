@@ -1,0 +1,423 @@
+{
+  "name": "PR Reviewer",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst pr = body.pull_request || {};\nreturn [{ json: { prNumber: pr.number, prTitle: pr.title, prBody: pr.body || '', author: pr.user?.login, repoOwner: body.repository?.owner?.login, repoName: body.repository?.name, additions: pr.additions, deletions: pr.deletions, changedFiles: pr.changed_files, diffUrl: pr.diff_url, htmlUrl: pr.html_url } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "2f83c62f-c76f-44b2-a2da-5bcfca66b46b",
+      "name": "Get PR Data"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Get PR Data').first().json.diffUrl }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        624,
+        112
+      ],
+      "id": "998b1ae2-3239-441d-9c8c-cc3702973de9",
+      "name": "Fetch PR Difference"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "list",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repoOwner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repoName }}"
+        }
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        624,
+        -112
+      ],
+      "id": "aa5f16b9-fcdf-47ac-8fd7-565230f0a50d",
+      "name": "List PR Files",
+      "webhookId": "1494580d-10e4-4e06-bd72-a0f51a8eb2de",
+      "credentials": {
+        "githubApi": {
+          "id": "eMgkJO2GV4NvMK9L",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c7d6d59f-ad89-4e50-8c89-68a3dd89f42a",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "opened",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "3ea35263-361c-4991-b2eb-2114e1e9d7b5",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "synchronize",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "17f682b6-0fa7-4907-856b-bdda6e93e774",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "reopened",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": "=",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "c44a18ba-d28f-44ef-b434-19ee61c2f45a",
+      "name": "Filter only Updated or Opened"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.2",
+          "mode": "list",
+          "cachedResultName": "gpt-5.2"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        208
+      ],
+      "id": "49caab18-7452-41c6-a6d2-de867092a26e",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "nmhC9OLdZ9EXisTy",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst prData = $('Get PR Data').first().json;\nconst diff = $('Fetch PR Difference').first().json.data || '';\nconst labels = prData.additions + prData.deletions > 200 ? ['size/L'] : ['size/S'];\nreturn [{ json: { ...prData, diffPreview: diff.substring(0, 3000), suggestedLabels: labels } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "dcd2cb62-e00f-420e-bae1-42d7ce27d0d2",
+      "name": "Analyze File Changes"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=PR Review for: {{ $json.prTitle }}. Diff: {{ $json.diffPreview }}",
+        "options": {
+          "systemMessage": "You are a github review assistant.\n\nFormat response as JSON with: qualityScore, summary, strengths, concerns, suggestions.\n\nqualityScore - it should be integer.\nsummary - it can be string or list of string\nconcerns - it can be string or list of string\nsuggestions - it can be string or list of string"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "7786a794-a4cb-4429-8b74-6e6130759410",
+      "name": "AI PR Analysis Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.output;\nconst prData = $('Analyze File Changes').first().json;\nconst review = { qualityScore: 85, summary: \"AI Analysis Complete\", approvalRecommendation: \"approve\" };\nreturn [{ json: { ...prData, aiReview: review, finalLabels: prData.suggestedLabels, reviewComment: JSON.parse(output) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        0
+      ],
+      "id": "66c8d6e5-dbb1-4dd4-92bc-c1ad0d712707",
+      "name": "Parse Review"
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "reviewComment = _items[0]['json']['reviewComment']\nrepoOwner = _items[0]['json']['repoOwner']\nrepoName = _items[0]['json']['repoName']\nprNumber = _items[0]['json']['prNumber']\n\nqualityScore = reviewComment['qualityScore']\n\ndef formating(key_name):\n  output = ''\n  if key_name in reviewComment:\n    response = reviewComment[key_name]\n    if isinstance(response, list):\n      indx = 1\n      for i in range(len(response)):\n        output += str(indx) + ' - ' + response[i] + '<br>'\n        indx += 1\n      output = output[:-4]\n    else:\n      output = response\n    return output\n  else:\n    return 'NA'\n\nstrengths = formating('strengths')\n\nconcerns = formating('concerns')\n\nsuggestions = formating('suggestions')\n\nsummary = formating('summary')\n\n\nreturn {\"repoOwner\" : repoOwner, \"repoName\": repoName, \"prNumber\": prNumber, \"qualityScore\": qualityScore, \"strengths\": strengths, \"concerns\": concerns, \"suggestions\": suggestions, \"summary\": summary}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        0
+      ],
+      "id": "5452086e-9a6c-4269-a18b-9e8942d927ec",
+      "name": "Format Comment"
+    },
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "YajithVishwa",
+          "mode": "list",
+          "cachedResultName": "YajithVishwa",
+          "cachedResultUrl": "https://github.com/YajithVishwa"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "n8n-test",
+          "mode": "list",
+          "cachedResultName": "n8n-test",
+          "cachedResultUrl": "https://github.com/YajithVishwa/n8n-test"
+        },
+        "events": [
+          "pull_request"
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "17896e97-5080-4566-a233-0b4c15541759",
+      "name": "Github PR Hook",
+      "webhookId": "6ac12d4d-414c-4883-94fc-db0225193f15",
+      "credentials": {
+        "githubApi": {
+          "id": "eMgkJO2GV4NvMK9L",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "757f8a5c-acce-4367-a0e0-4319e24211ac",
+      "name": "Merge PR Outputs"
+    },
+    {
+      "parameters": {
+        "operation": "createComment",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repoOwner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repoName }}"
+        },
+        "issueNumber": "={{ $json.prNumber }}",
+        "body": "=**Comments By AI Agent**\n\n**Quality Score** - {{ $json.qualityScore }}\n\n**S͟u͟m͟m͟a͟r͟y͟** \n{{ $json.summary }}\n\n**S͟t͟r͟e͟n͟g͟t͟h͟s͟** \n{{ $json.strengths }}\n\n**C͟o͟n͟c͟e͟r͟n͟s͟**\n{{ $json.concerns }}"
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        0
+      ],
+      "id": "485ff9ce-e4d5-4796-ab25-4b080e756f28",
+      "name": "Post Comment",
+      "webhookId": "59b19341-38aa-4db0-9e04-77c7232b017a",
+      "credentials": {
+        "githubApi": {
+          "id": "eMgkJO2GV4NvMK9L",
+          "name": "GitHub account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get PR Data": {
+      "main": [
+        [
+          {
+            "node": "List PR Files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch PR Difference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch PR Difference": {
+      "main": [
+        [
+          {
+            "node": "Merge PR Outputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "List PR Files": {
+      "main": [
+        [
+          {
+            "node": "Merge PR Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter only Updated or Opened": {
+      "main": [
+        [
+          {
+            "node": "Get PR Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI PR Analysis Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze File Changes": {
+      "main": [
+        [
+          {
+            "node": "AI PR Analysis Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI PR Analysis Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Review": {
+      "main": [
+        [
+          {
+            "node": "Format Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Comment": {
+      "main": [
+        [
+          {
+            "node": "Post Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Github PR Hook": {
+      "main": [
+        [
+          {
+            "node": "Filter only Updated or Opened",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge PR Outputs": {
+      "main": [
+        [
+          {
+            "node": "Analyze File Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "54a0319c-7ec1-4547-a378-1e12c3d3e9ef",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "df170846ffbba8f58a03f76706d05fc410786671484a6836c774edb7d2e7daee"
+  },
+  "id": "pgNqJYMzUMWn220Q",
+  "tags": []
+}
